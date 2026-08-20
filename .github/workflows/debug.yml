@@ -1,0 +1,46 @@
+name: Release with log
+
+on:
+  workflow_dispatch:
+    inputs:
+      github_id:
+        type: string
+        description: ghid
+        required: true
+      tg_id:
+        type: string
+        description: tgid
+        required: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Prepare
+        id: prepareArtifact
+        run: |
+          zygiskReleaseName=`ls LSPosed-v*-release-log.zip | awk -F '.zip' '{print $1}'` && echo "zygiskReleaseName=$zygiskReleaseName" >> $GITHUB_OUTPUT
+          unzip ./LSPosed-v*-release-log.zip -d LSPosed-release-log
+          echo "nowFileName=$zygiskReleaseName-$(date +%s)" >> $GITHUB_OUTPUT
+
+      - name: Patch
+        if: ${{ inputs.github_id != '0' }}
+        run: |
+          cd LSPosed-release-log
+          echo "validated=${{ inputs.github_id }}" >> module.prop
+          sha256sum module.prop | awk '{printf "%s", $1}' > module.prop.sha256
+          touch -t 198002010000.00 module.prop
+          touch -t 198002010000.00 module.prop.sha256
+
+      - name: Repack
+        run: |
+          cd LSPosed-release-log
+          zip -r "../${{ steps.prepareArtifact.outputs.nowFileName }}.zip" .
+
+      - name: Upload
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument" -F chat_id="${{ inputs.tg_id }}" -F document="@${{ steps.prepareArtifact.outputs.nowFileName }}.zip"
